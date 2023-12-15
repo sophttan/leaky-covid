@@ -1,17 +1,16 @@
-# Sophia Tan 1/9/23
-# Cleaning CDCR COVID-19 vaccination data through 12/16/22 
+# Sophia Tan 12/13/23
+# Cleaning CDCR COVID-19 vaccination data through 5/26/23
 
 rm(list=ls())
 gc()
 
-setwd("D:/CCHCS_premium/CDCR Data/Dec 16 2022 Data")
+source(here::here("config.R"))
 
-library(tidyverse)
-library(lubridate)
+setwd("D:/CCHCS_premium/CDCR Data/May 26 2023 Data/")
 
 ###### COVID Infection Data ######
-vacc <-  read_delim("Immunization_20221216.csv", delim=";")
-head()
+vacc <-  read_delim("Immunization_20230526.csv", delim=";")
+head(vacc)
 
 unique(vacc$Vaccine)
 covid_vacc <- vacc %>% filter(grepl("SARS", Vaccine))
@@ -36,29 +35,41 @@ covid_vacc_cleaned <- covid_vacc_cleaned %>% group_by(ResidentId, Date) %>% arra
 covid_vacc_cleaned <- covid_vacc_cleaned %>% arrange(Date) %>% 
   group_by(ResidentId) %>% mutate(num_dose = 1:n(), max_dose = n()) %>% arrange(ResidentId)
 
-# if someone was marked to have received any mrna vaccine as their primary series (even if both j&j and mrna reported), mark as mrna vacc
+# if someone was marked to have received any j&j as first dose and second dose is >60 days, mark as receiving j&j, even if
+# mrna also reported as first dose
 covid_vacc_cleaned <- covid_vacc_cleaned %>% 
-  mutate(full_vacc = ifelse(grepl("mRNA", Vaccine[1]), 2, 1),
-         booster_add_dose = ifelse(max(num_dose) > 2 | (grepl("Ad26", Vaccine[1]) & max(num_dose > 1)), 1, 0),
-         incomplete = ifelse(max(num_dose)==1 & grepl("mRNA", Vaccine[1]), 1, 0))
+  mutate(time_since=c(diff(Date)%>%as.numeric(),NA)) %>%
+  mutate(full_vacc = ifelse(grepl("Ad26", first(Vaccine)), 1, 2),
+         full_vacc = ifelse(full_vacc==1&grepl("mRNA", first(Vaccine))&!is.na(first(time_since))&first(time_since<60), 2, full_vacc),
+         booster_add_dose = ifelse(num_dose<=full_vacc, 0, num_dose - full_vacc),
+         incomplete = ifelse(max(num_dose) < full_vacc, 1, 0))
 
-# 116532 residents received at least 1 dose of a vaccine
+# 122184 residents received at least 1 dose of a vaccine
 num_res_vacc <- covid_vacc_cleaned$ResidentId %>% unique() %>% length()
 
-# 2947 residents (3% of vaccinated residents) received only 1 dose of an mRNA vaccine 
+# 3666 residents (3% of vaccinated residents) received only 1 dose of an mRNA vaccine 
 covid_vacc_cleaned %>% filter(incomplete==1)
 
-# 37404 residents (38% of vaccinated residents) have completed series but no booster (not accounting for time eligibility)
-covid_vacc_cleaned %>% filter(booster_add_dose == 0 & incomplete ==0) 
-
-covid_vacc_cleaned %>% summarise(type=first(Vaccine)) %>% filter(!grepl("\\|", type)) %>%
-  group_by(type) %>% summarise(count=n(), prop=count/nrow(.))
+# 38026 residents (38% of vaccinated residents) have completed series but no booster (not accounting for time eligibility)
+covid_vacc_cleaned %>% filter(all(booster_add_dose == 0 & incomplete ==0))
 
 # offset doses of covid vaccines to account for delay in protection 
 covid_vacc_cleaned <- covid_vacc_cleaned %>% mutate(Date_offset = Date + 14)
 
-write_csv(covid_vacc_cleaned, "D:/CCHCS_premium/st/indirects/cleaned-data/cleaned_vaccination_data.csv")
+write_csv(covid_vacc_cleaned, "D:/CCHCS_premium/st/leaky/cleaned-data/complete_vaccine_data121523.csv")
 
-vacc %>% group_by(Date) %>% filter(any(grepl("bivalent", Vaccine))) %>% 
-  group_by(Date, Vaccine) %>% summarise(count=n()) %>% 
-  group_by(Date) %>% mutate(prop=count/sum(count)) %>% filter(grepl("bivalent", Vaccine)) %>% view()
+covid_vacc_cleaned %>% group_by(Date) %>% summarise(primary=sum(full_vacc==num_dose),
+                                                    boost1=sum(booster_add_dose==1),
+                                                    boost2=sum(booster_add_dose==2), 
+                                                    boost3=sum(booster_add_dose>2)) %>% 
+  mutate_at(c("primary", "boost1", "boost2", "boost3"), cumsum) %>% 
+  ggplot(aes(as.POSIXct(Date))) +
+  geom_line(aes(y=primary, color="Primary series")) + 
+  geom_line(aes(y=boost1, color="1 booster")) + 
+  geom_line(aes(y=boost2, color="2+ boosters")) +
+  geom_line(aes(y=boost3, color="3+ boosters")) +
+  scale_x_datetime("Time", breaks="1 month") + 
+  scale_y_continuous("Cumulative number of residents") +
+  theme(axis.text.x = element_text(angle=90), legend.title = element_blank())
+
+  
