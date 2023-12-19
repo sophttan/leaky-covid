@@ -1,13 +1,15 @@
-# clean comorbidity data to estimate covid risk among residents
+# Sophia Tan 12/15/23
+# Clean risk data 5/26/23
+
 rm(list=ls())
+gc()
 
-library(tidyverse)
-library(readr)
-library(lubridate)
+source(here::here("config.R"))
 
-setwd("D:/CCHCS_premium/CDCR Data/Dec 16 2022 Data")
+setwd("D:/CCHCS_premium/CDCR Data/May 26 2023 Data/")
 
-comorbidity <- read_delim("Comorbidity_20221216.csv",delim = ";")
+
+comorbidity <- read_delim("cov",delim = ";")
 covid_risk <- comorbidity %>% filter(Comorbidity=='CovidWeightedRisk')
 covid_risk
 
