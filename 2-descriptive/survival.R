@@ -64,4 +64,4 @@ test <- function(subvariant) {
 }
 
 t <- rbind(test(1), test(2), test(3), test(4))
-t %>% write_csv(here::here("tables/censoring"))
+t %>% write_csv(here::here("tables/censoring.csv"))
