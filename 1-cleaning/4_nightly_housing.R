@@ -10,7 +10,7 @@ setwd("D:/CCHCS_premium/CDCR Data/May 26 2023 Data/")
 
 nh <- read_delim("NightlyHousing_20230526.csv", delim = ";", 
                  col_select = c("Night", "ResidentId", "RoomId", "Institution", "BuildingId"), 
-                 n_max = 10000000)
+                 n_max = 50000000)
 
 min(nh$Night)
 max(nh$Night)
@@ -24,7 +24,7 @@ names(nh_after_3_1_2020)
 nh_after_3_1_2020
 
 residents <- data.frame(ResidentId = nh_after_3_1_2020$ResidentId%>%unique(),
-                        group = rep(1:2, length.out=6137))
+                        group = rep(1:2, length.out=29609))
 
 nh_after_3_1_2020 <- nh_after_3_1_2020 %>% left_join(residents)
 

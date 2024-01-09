@@ -15,39 +15,53 @@ resident_movement <- resident_movement %>% group_by(ResidentId) %>% filter(first
 testing <- read_csv("complete_testing_data121323.csv")
 
 vacc <- read_csv("complete_vaccine_data121523.csv")
+vacc <- vacc %>%
+  rename("vacc.Day"="Date")
 
 inf <- testing %>% group_by(ResidentId, num_pos) %>% filter(num_pos>0) %>% summarise_all(first) %>% select(ResidentId, Day, num_pos)
-inf
-
-vacc
-
-resident_movement_subvar1 <- resident_movement %>% filter(first <= "2021-12-15" & last >="2021-12-15")
-
-exclude_residents_initial <- (inf %>% filter(any(as.Date("2021-12-15")-Day<=90 & as.Date("2021-12-15")-Day>0)))$ResidentId %>% unique()
-
-resident_movement$ResidentId%>%unique()
-
-resident_movement_subvar1 <- resident_movement_subvar1 %>% filter(!ResidentId %in% exclude_residents_initial)
-
-resident_movement_subvar1 <- resident_movement_subvar1 %>% mutate(first_adj="2021-12-15")
-
-resident_movement_subvar1
-
-resident_movement_subvar1 <- resident_movement_subvar1 %>% left_join(inf %>% filter(Day <= "2022-05-14")) %>% 
-  filter(n()==1 | Day==last(Day)) %>%
+inf <- inf %>%
   rename("inf.Day"="Day")
 
-resident_movement_subvar1 <- resident_movement_subvar1 %>%
-  left_join(vacc %>% select(ResidentId, Date, num_dose) %>% rename("vacc.Day"="Date") %>% filter(vacc.Day <= "2022-05-14")) %>%
-  filter(n()==1 | vacc.Day==last(vacc.Day))
 
-resident_movement_subvar1 <- resident_movement_subvar1 %>% 
-  mutate(vacc.Day = if_else(vacc.Day <= "2021-12-15", NA, vacc.Day),
-         inf.Day = if_else(inf.Day <= "2021-12-15", NA, inf.Day),
-         earliest=pmin(as.Date("2022-05-14"), last, inf.Day, vacc.Day, na.rm=T),
-         censored = case_when(earliest==as.Date("2022-05-14")~"end_period",
-                              earliest==last~"moved",
-                              earliest==vacc.Day~"vacc",
-                              earliest==inf.Day~"infection"))
+test <- function(subvariant) {
+  first_day <- c("2021-12-15", "2022-05-15", "2022-08-15", "2022-12-15")
+  last_day <- c("2022-05-14", "2022-08-14", "2022-12-14", "2023-03-14")
+  
+  resident_movement_subvar <- resident_movement %>% filter(first <= first_day[subvariant] & last >= first_day[subvariant])
 
-resident_movement_subvar1$censored %>% table()
+  exclude_residents_initial <- (inf %>% filter(any(as.Date(first_day[subvariant])-inf.Day<=90 & as.Date(first_day[subvariant])-inf.Day>0)))$ResidentId %>% unique()
+  
+  resident_movement_subvar <- resident_movement_subvar %>% filter(!ResidentId %in% exclude_residents_initial)
+  
+  resident_movement_subvar <- resident_movement_subvar %>% mutate(first_adj=first_day[subvariant])
+  
+  resident_movement_subvar <- resident_movement_subvar %>% 
+    left_join(inf %>% filter(inf.Day >= first_day[subvariant] & inf.Day <= last_day[subvariant])) %>% 
+    filter(n()==1 | inf.Day==first(inf.Day)) 
+  
+  resident_movement_subvar <- resident_movement_subvar %>%
+    left_join(vacc %>% select(ResidentId, vacc.Day, num_dose) %>% filter(vacc.Day >= first_day[subvariant] & vacc.Day <= last_day[subvariant])) %>%
+    filter(n()==1 | vacc.Day==last(vacc.Day))
+  
+  resident_movement_subvar <- resident_movement_subvar %>% 
+    mutate(vacc.Day = if_else(vacc.Day <= first_day[subvariant], NA, vacc.Day),
+           inf.Day = if_else(inf.Day <= first_day[subvariant], NA, inf.Day),
+           earliest=pmin(as.Date(last_day[subvariant]), last, vacc.Day,na.rm=T),
+           earliest_novacc=pmin(as.Date(last_day[subvariant]), last,na.rm=T),
+           censored = case_when(earliest==as.Date(last_day[subvariant])~"end_period",
+                                earliest==vacc.Day~"vaccinated",
+                                earliest==last~"moved"),
+           censored_novacc = case_when(earliest_novacc==as.Date(last_day[subvariant])~"end_period",
+                                       earliest_novacc==last~"moved"))
+  
+  summary_subvar <- resident_movement_subvar %>% 
+    group_by(censored) %>% summarise(prop=n()/nrow(.))
+  summary_subvar_novacc <- resident_movement_subvar %>% 
+    group_by(censored_novacc) %>% summarise(prop=n()/nrow(.)) %>% 
+    rbind(list(NA, NA, NA))
+  
+  cbind(subvar=subvariant, n=nrow(resident_movement_subvar)) %>% cbind(summary_subvar, summary_subvar_novacc)
+}
+
+t <- rbind(test(1), test(2), test(3), test(4))
+t %>% write_csv(here::here("tables/censoring"))
