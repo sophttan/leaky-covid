@@ -116,20 +116,25 @@ survival_mostrecent_vaccinf_filtered <- survival_mostrecent_vacc_filtered %>% gr
 
 survival_mostrecent_vaccinf_filtered <- survival_mostrecent_vaccinf_filtered %>% mutate(last.dose.adj.binary = if_else(last.dose.adj==0, 0, 1))
 
-survival_mostrecent_vaccinf_filtered %>% group_by(first_adj) %>% summarise(n=n())
+survival_mostrecent_vaccinf_filtered %>% group_by(first_adj) %>% summarise(n=n()) %>%
+  write_csv(here::here("tables/overall_n.csv"))
 
-inf_summary <- survival_mostrecent_vaccinf_filtered %>% group_by(first_adj, has.past.inf) %>% summarise(n=n())
+inf_summary <- survival_mostrecent_vaccinf_filtered %>% group_by(first_adj, has.past.inf) %>% summarise(n=n()) %>% mutate(prop=n/sum(n))
 inf_summary %>% write_csv(here::here("tables/inf_binary_n.csv"))
 
-inf_vacc_summary <- survival_mostrecent_vaccinf_filtered %>%  group_by(first_adj, last.dose.adj.binary, has.past.inf) %>% summarise(n=n())
+inf_vacc_summary <- survival_mostrecent_vaccinf_filtered %>%
+  group_by(first_adj, last.dose.adj.binary, has.past.inf) %>% 
+  summarise(n=n()) %>% mutate(prop=n/sum(n))
 inf_vacc_summary %>% write_csv(here::here("tables/inf_vacc_binary_n.csv"))
 
-vaccine_summary <- survival_mostrecent_vaccinf_filtered %>% group_by(first_adj, last.dose.adj) %>% summarise(n=n())
+vaccine_summary <- survival_mostrecent_vaccinf_filtered %>% 
+  group_by(first_adj, last.dose.adj) %>%
+  summarise(n=n()) %>% mutate(prop=n/sum(n))
 vaccine_summary %>% write_csv(here::here("tables/vaccine_adj_dose_n.csv"))
 
 survival_mostrecent_vaccinf_filtered %>% 
   group_by(first_adj, last.dose.adj.binary) %>% 
-  summarise(n=n()) %>% 
+  summarise(n=n()) %>% mutate(prop=n/sum(n)) %>% 
   write_csv(here::here("tables/vaccine_adj_binary_n.csv"))
 
 
