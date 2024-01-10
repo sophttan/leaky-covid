@@ -23,7 +23,7 @@ inf <- inf %>%
   rename("inf.Day"="Day")
 
 
-test <- function(subvariant) {
+generate_survival_data <- function(subvariant, include_inf=F) {
   first_day <- c("2021-12-15", "2022-05-15", "2022-08-15", "2022-12-15") %>% as.Date()
   last_day <- c("2022-05-14", "2022-08-14", "2022-12-14", "2023-03-14") %>% as.Date()
   
@@ -49,28 +49,64 @@ test <- function(subvariant) {
   resident_movement_subvar <- resident_movement_subvar %>% 
     mutate(vacc.Day = if_else(vacc.Day <= first_day[subvariant], NA, vacc.Day),
            inf.Day = if_else(inf.Day <= first_day[subvariant], NA, inf.Day),
-           earliest=pmin(last_day[subvariant], last, vacc.Day,na.rm=T),
-           earliest_novacc=pmin(last_day[subvariant], last,na.rm=T),
+           earliest=if_else(include_inf, 
+                            pmin(last_day[subvariant], last, inf.Day, vacc.Day,na.rm=T), 
+                            pmin(last_day[subvariant], last, vacc.Day,na.rm=T)),
+           earliest_novacc=if_else(include_inf, 
+                                   pmin(last_day[subvariant], last, inf.Day,na.rm=T), 
+                                   pmin(last_day[subvariant], last,na.rm=T)),
            censored = case_when(earliest==last_day[subvariant]~"end_period",
+                                earliest==inf.Day~"inf",
                                 earliest==vacc.Day~"vaccinated",
                                 earliest==last~"moved"),
            censored_novacc = case_when(earliest_novacc==last_day[subvariant]~"end_period",
+                                       earliest==inf.Day~"inf",
                                        earliest_novacc==last~"moved"), 
-           time_til_earliest = (earliest - first_day[subvariant]) %>% as.numeric(),
-           time_til_earliest_vacc = (earliest_novacc - first_day[subvariant]) %>% as.numeric())
+           survival = (earliest - first_day[subvariant]) %>% as.numeric(),
+           survival_novacc = (earliest_novacc - first_day[subvariant]) %>% as.numeric())
   
-  print((resident_movement_subvar %>% filter(censored!="end_period"))$time_til_earliest %>% hist())
+  resident_movement_subvar
+}
 
-  summary_subvar <- resident_movement_subvar %>% 
+print((generate_survival_data(1,F) %>% filter(censored!="end_period"))$time_til_earliest %>% hist()) 
+
+summarise_censoring <- function(data) {
+  summary_subvar <- data %>% 
     group_by(censored) %>% summarise(prop=round(n()/nrow(.),2))
+  
   summary_subvar_novacc <- resident_movement_subvar %>% 
     group_by(censored_novacc) %>% summarise(prop=round(n()/nrow(.),2)) %>% 
     rbind(list(NA, NA, NA))
   
   cbind(subvar=subvariant, n=nrow(resident_movement_subvar)) %>% cbind(summary_subvar, summary_subvar_novacc)
-}
+} 
 
-t <- rbind(test(1), test(2), test(3), test(4))
+survival <- rbind(generate_survival_data(1, T),
+                  generate_survival_data(2, T), 
+                  generate_survival_data(3, T), 
+                  generate_survival_data(4, T))
+
+survival
+
+survival_mostrecent_vacc <- survival %>% group_by(ResidentId, first_adj) %>% 
+  left_join(vacc %>% select(ResidentId, vacc.Day, num_dose, full_vacc) %>% 
+              rename("last.vacc"="vacc.Day", "last.dose"="num_dose")) %>% 
+  filter(last.vacc%>%is.na()|all(last.vacc>first_adj)|last.vacc<=first_adj) %>% 
+  filter(last.vacc%>%is.na()|last.vacc==max(last.vacc)) %>% 
+  mutate(last.vacc=if_else(last.vacc>first_adj, NA, last.vacc),
+         last.dose=if_else(last.vacc>first_adj, NA, last.dose))
+
+survival_mostrecent_vacc <- survival_mostrecent_vacc %>% 
+  replace_na(list(last.dose=0)) %>%
+  # add 1 to J&J recipients
+  # max doses at 4
+  mutate(last.dose.adj=if_else(last.dose!=0&full_vacc==1&last.dose>=full_vacc, last.dose+1, last.dose),
+         last.dose.adj=if_else(last.dose.adj>4, 4, last.dose.adj))
+
+vaccine_summary <- survival_mostrecent_vacc %>% group_by(first_adj, last.dose.adj) %>% summarise(n=n())
+vaccine_summary %>% filter(last.dose.adj!=1) %>% write_csv(here::here("tables/vaccine_adj_dose_n.csv"))
+
+
 t %>% write_csv(here::here("tables/censoring.csv"))
 
 
