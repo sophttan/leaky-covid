@@ -8,7 +8,8 @@ source(here::here("config.R"))
 
 setwd("D:/CCHCS_premium/st/leaky/cleaned-data")
 
-resident_movement <- read_csv("resident_movement1.csv") %>% rbind(read_csv("resident_movement2.csv"))
+resident_movement <- read_csv("resident_movement1.csv") %>% rbind(read_csv("resident_movement2.csv")) %>%
+  rbind(read_csv("resident_movement3.csv")) %>% rbind(read_csv("resident_movement4.csv"))
 
 resident_movement <- resident_movement %>% group_by(ResidentId) %>% filter(first(first)<"2020-04-01")
 
@@ -68,7 +69,7 @@ generate_survival_data <- function(subvariant, include_inf=F) {
   resident_movement_subvar
 }
 
-print((generate_survival_data(1,F) %>% filter(censored!="end_period"))$time_til_earliest %>% hist()) 
+print((generate_survival_data(1,F) %>% filter(censored!="end_period"))$survival %>% hist()) 
 
 summarise_censoring <- function(data) {
   summary_subvar <- data %>% 
@@ -98,13 +99,38 @@ survival_mostrecent_vacc <- survival %>% group_by(ResidentId, first_adj) %>%
 
 survival_mostrecent_vacc <- survival_mostrecent_vacc %>% 
   replace_na(list(last.dose=0)) %>%
-  # add 1 to J&J recipients
+  # add 1 to J&J recipients 
   # max doses at 4
   mutate(last.dose.adj=if_else(last.dose!=0&full_vacc==1&last.dose>=full_vacc, last.dose+1, last.dose),
          last.dose.adj=if_else(last.dose.adj>4, 4, last.dose.adj))
 
-vaccine_summary <- survival_mostrecent_vacc %>% group_by(first_adj, last.dose.adj) %>% summarise(n=n())
-vaccine_summary %>% filter(last.dose.adj!=1) %>% write_csv(here::here("tables/vaccine_adj_dose_n.csv"))
+survival_mostrecent_vacc_filtered <- survival_mostrecent_vacc %>% filter(last.dose.adj!=1)
+survival_mostrecent_vacc_filtered <- survival_mostrecent_vacc_filtered %>% select(!c(num_pos, inf.Day, vacc.Day, full_vacc))
+
+survival_mostrecent_vaccinf_filtered <- survival_mostrecent_vacc_filtered %>% group_by(ResidentId, first_adj) %>% 
+  left_join(inf %>% rename("last.inf"="inf.Day")) %>% 
+  filter(last.inf%>%is.na()|all(last.inf>first_adj)|last.inf<=first_adj) %>% 
+  filter(last.inf%>%is.na()|last.inf==max(last.inf)) %>% 
+  mutate(last.inf=if_else(last.inf>first_adj, NA, last.inf), 
+         has.past.inf=if_else(last.inf%>%is.na(), 0, 1))
+
+survival_mostrecent_vaccinf_filtered <- survival_mostrecent_vaccinf_filtered %>% mutate(last.dose.adj.binary = if_else(last.dose.adj==0, 0, 1))
+
+survival_mostrecent_vaccinf_filtered %>% group_by(first_adj) %>% summarise(n=n())
+
+inf_summary <- survival_mostrecent_vaccinf_filtered %>% group_by(first_adj, has.past.inf) %>% summarise(n=n())
+inf_summary %>% write_csv(here::here("tables/inf_binary_n.csv"))
+
+inf_vacc_summary <- survival_mostrecent_vaccinf_filtered %>%  group_by(first_adj, last.dose.adj.binary, has.past.inf) %>% summarise(n=n())
+inf_vacc_summary %>% write_csv(here::here("tables/inf_vacc_binary_n.csv"))
+
+vaccine_summary <- survival_mostrecent_vaccinf_filtered %>% group_by(first_adj, last.dose.adj) %>% summarise(n=n())
+vaccine_summary %>% write_csv(here::here("tables/vaccine_adj_dose_n.csv"))
+
+survival_mostrecent_vaccinf_filtered %>% 
+  group_by(first_adj, last.dose.adj.binary) %>% 
+  summarise(n=n()) %>% 
+  write_csv(here::here("tables/vaccine_adj_binary_n.csv"))
 
 
 t %>% write_csv(here::here("tables/censoring.csv"))

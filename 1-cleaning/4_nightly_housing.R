@@ -9,8 +9,8 @@ source(here::here("config.R"))
 setwd("D:/CCHCS_premium/CDCR Data/May 26 2023 Data/")
 
 nh <- read_delim("NightlyHousing_20230526.csv", delim = ";", 
-                 col_select = c("Night", "ResidentId", "RoomId", "Institution", "BuildingId"), 
-                 n_max = 50000000)
+                 col_select = c("Night", "ResidentId", "RoomId", "Institution", "BuildingId"))#, 
+                 # n_max = 50000000)
 
 min(nh$Night)
 max(nh$Night)
@@ -23,21 +23,22 @@ names(nh_after_3_1_2020)
 
 nh_after_3_1_2020
 
-residents <- data.frame(ResidentId = nh_after_3_1_2020$ResidentId%>%unique(),
-                        group = rep(1:2, length.out=29609))
+residents <- nh_after_3_1_2020$ResidentId%>%unique()
+residents <- data.frame(ResidentId = residents,
+                        group = rep(1:4, length.out=length(residents)))
 
 nh_after_3_1_2020 <- nh_after_3_1_2020 %>% left_join(residents)
 
 list_housing_data <- nh_after_3_1_2020 %>% group_by(group) %>% group_split()
 
-for(i in 1:2){
+for(i in 1:4){
   write_csv(list_housing_data[[i]]%>%select(!group),paste0("D:/CCHCS_premium/st/leaky/raw-data/housing_subset", i,".csv"))
 }
 
 rm(list=ls())
 gc()
 
-for (i in 1:2) {
+for (i in 1:4) {
   d <- read_csv(paste0("D:/CCHCS_premium/st/leaky/raw-data/housing_subset", i,".csv"))
   
   d <- d %>% group_by(ResidentId) %>% arrange(ResidentId, Night)
