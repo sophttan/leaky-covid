@@ -183,6 +183,7 @@ total_tests <- total_tests %>% mutate(total_days=(last_adj-first_adj+1)%>%as.num
 total_tests %>% group_by(first_adj) %>% summarise(test_rate=mean(testing_rate)) 
 total_tests %>% group_by(first_adj) %>% summarise(test_rate=mean(testing_rate)) 
 total_tests %>% group_by(first_adj, last.dose.adj.binary) %>% 
-  summarise(testing_rate=mean(testing_rate), prop_notests=sum(tests==0)/n()) %>%
+  summarise(testing_rate=mean(testing_rate[testing_rate>0]) %>% round(3), 
+            prop_notests=(sum(tests==0)/n()) %>% round(3)) %>%
   write_csv(here::here("tables/testing_descriptive.csv"))
 total_tests %>% group_by(first_adj, last.dose.adj) %>% summarise(no_tests=sum(tests==0), n=n(), prop_notests=sum(tests==0)/n())
