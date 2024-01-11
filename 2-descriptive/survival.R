@@ -1,5 +1,5 @@
 # # Sophia Tan 12/19/23
-# Combine housing and building data
+# Basic survival data + descriptive statistics
 
 rm(list=ls())
 gc()
@@ -137,7 +137,20 @@ survival_mostrecent_vaccinf_filtered %>%
   summarise(n=n()) %>% mutate(prop=n/sum(n)) %>% 
   write_csv(here::here("tables/vaccine_adj_binary_n.csv"))
 
+survival_mostrecent_vaccinf_filtered <- survival_mostrecent_vaccinf_filtered %>% 
+  mutate(time_since_vacc=(first_adj-last.vacc)%>%as.numeric(), 
+         time_since_vacc_cut=cut(time_since_vacc, breaks=c(0, 91, 182, 365, Inf), right = F))  
 
-t %>% write_csv(here::here("tables/censoring.csv"))
+survival_mostrecent_vaccinf_filtered %>% filter(last.dose.adj>0) %>%
+  group_by(first_adj, last.dose.adj, time_since_vacc_cut) %>% 
+  summarise(n=n()) %>% mutate(prop=n/sum(n)) %>% 
+  write_csv(here::here("tables/vaccine_time_n.csv"))
+
+survival_mostrecent_vaccinf_filtered %>% filter(last.dose.adj>0) %>%
+  group_by(first_adj, last.dose.adj.binary, time_since_vacc_cut) %>% 
+  summarise(n=n()) %>% mutate(prop=n/sum(n)) %>% 
+  write_csv(here::here("tables/vaccine_binary_time_n.csv"))
+
+# t %>% write_csv(here::here("tables/censoring.csv"))
 
 
