@@ -153,4 +153,36 @@ survival_mostrecent_vaccinf_filtered %>% filter(last.dose.adj>0) %>%
 
 # t %>% write_csv(here::here("tables/censoring.csv"))
 
+#### look at testing data ####
+survival_mostrecent_vaccinf_filtered_testing <- survival_mostrecent_vaccinf_filtered %>%
+  mutate(last_adj=case_when(first_adj=="2021-12-15"~"2022-05-14",
+                            first_adj=="2022-05-15"~"2022-08-14",
+                            first_adj=="2022-08-15"~"2022-12-14",
+                            first_adj=="2022-12-15"~"2023-03-14") %>% as.Date()) %>% 
+  left_join(testing %>% select(ResidentId, Day) %>% rename("test.Day"="Day"))
 
+survival_mostrecent_vaccinf_testing_filtered <- survival_mostrecent_vaccinf_filtered_testing %>% 
+  filter(n()==1|all(test.Day > last_adj|test.Day < first_adj)|(test.Day <= last_adj & test.Day >= first_adj))
+
+survival_mostrecent_vaccinf_testing_filtered <- survival_mostrecent_vaccinf_testing_filtered %>%
+  mutate(test.Day=if_else(test.Day %>% is.na() | test.Day < first_adj | test.Day>last_adj, NA, test.Day)) %>% 
+  distinct(ResidentId, first_adj, test.Day, .keep_all = T)
+
+survival_mostrecent_vaccinf_testing_filtered_selected <- survival_mostrecent_vaccinf_testing_filtered %>%
+  select(first_adj, last_adj, last.dose.adj, last.dose.adj.binary, test.Day)
+
+total_tests <- survival_mostrecent_vaccinf_testing_filtered_selected %>% 
+  summarise(last_adj=first(last_adj), 
+            last.dose.adj=first(last.dose.adj), 
+            last.dose.adj.binary=first(last.dose.adj.binary),
+            tests=sum(!test.Day%>%is.na()))
+
+total_tests <- total_tests %>% mutate(total_days=(last_adj-first_adj+1)%>%as.numeric(),
+                                      testing_rate=tests/total_days*30.4)
+
+total_tests %>% group_by(first_adj) %>% summarise(test_rate=mean(testing_rate)) 
+total_tests %>% group_by(first_adj) %>% summarise(test_rate=mean(testing_rate)) 
+total_tests %>% group_by(first_adj, last.dose.adj.binary) %>% 
+  summarise(testing_rate=mean(testing_rate), prop_notests=sum(tests==0)/n()) %>%
+  write_csv(here::here("tables/testing_descriptive.csv"))
+total_tests %>% group_by(first_adj, last.dose.adj) %>% summarise(no_tests=sum(tests==0), n=n(), prop_notests=sum(tests==0)/n())
