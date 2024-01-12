@@ -151,7 +151,14 @@ survival_mostrecent_vaccinf_filtered %>% filter(last.dose.adj>0) %>%
   summarise(n=n()) %>% mutate(prop=n/sum(n)) %>% 
   write_csv(here::here("tables/vaccine_binary_time_n.csv"))
 
+
+survival_mostrecent_vaccinf_filtered %>% 
+  select(!c(num_building, first, last, days, num_dose, num_pos)) %>% 
+  write_csv("cleaned_survival_data_prematch011124.csv")
+
 # t %>% write_csv(here::here("tables/censoring.csv"))
+
+
 
 #### look at testing data ####
 survival_mostrecent_vaccinf_filtered_testing <- survival_mostrecent_vaccinf_filtered %>%
@@ -169,10 +176,11 @@ survival_mostrecent_vaccinf_testing_filtered <- survival_mostrecent_vaccinf_test
   distinct(ResidentId, first_adj, test.Day, .keep_all = T)
 
 survival_mostrecent_vaccinf_testing_filtered_selected <- survival_mostrecent_vaccinf_testing_filtered %>%
-  select(first_adj, last_adj, last.dose.adj, last.dose.adj.binary, test.Day)
+  select(first_adj, last_adj, has.past.inf, last.dose.adj, last.dose.adj.binary, test.Day)
 
 total_tests <- survival_mostrecent_vaccinf_testing_filtered_selected %>% 
   summarise(last_adj=first(last_adj), 
+            has.past.inf=first(has.past.inf),
             last.dose.adj=first(last.dose.adj), 
             last.dose.adj.binary=first(last.dose.adj.binary),
             tests=sum(!test.Day%>%is.na()))
@@ -187,3 +195,9 @@ total_tests %>% group_by(first_adj, last.dose.adj.binary) %>%
             prop_notests=(sum(tests==0)/n()) %>% round(3)) %>%
   write_csv(here::here("tables/testing_descriptive.csv"))
 total_tests %>% group_by(first_adj, last.dose.adj) %>% summarise(no_tests=sum(tests==0), n=n(), prop_notests=sum(tests==0)/n())
+
+
+total_tests %>% group_by(ResidentId, first_adj) %>% filter(tests>0) %>% 
+  filter(last.dose.adj.binary==0) %>%
+  group_by(first_adj, last.dose.adj.binary, has.past.inf) %>% 
+  summarise(n=n()) %>% mutate(prop=n/sum(n))
