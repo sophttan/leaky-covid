@@ -49,7 +49,7 @@ generate_survival_data <- function(subvariant, include_inf=F) {
   
   resident_movement_subvar <- resident_movement_subvar %>% 
     mutate(vacc.Day = if_else(vacc.Day <= first_day[subvariant], NA, vacc.Day),
-           inf.Day = if_else(inf.Day <= first_day[subvariant], NA, inf.Day),
+           inf.Day = if_else(inf.Day < first_day[subvariant], NA, inf.Day),
            earliest=if_else(include_inf, 
                             pmin(last_day[subvariant], last, inf.Day, vacc.Day,na.rm=T), 
                             pmin(last_day[subvariant], last, vacc.Day,na.rm=T)),
@@ -69,7 +69,7 @@ generate_survival_data <- function(subvariant, include_inf=F) {
   resident_movement_subvar
 }
 
-print((generate_survival_data(1,F) %>% filter(censored!="end_period"))$survival %>% hist()) 
+# print((generate_survival_data(1,F) %>% filter(censored!="end_period"))$survival %>% hist()) 
 
 summarise_censoring <- function(data) {
   summary_subvar <- data %>% 
@@ -109,9 +109,9 @@ survival_mostrecent_vacc_filtered <- survival_mostrecent_vacc_filtered %>% selec
 
 survival_mostrecent_vaccinf_filtered <- survival_mostrecent_vacc_filtered %>% group_by(ResidentId, first_adj) %>% 
   left_join(inf %>% rename("last.inf"="inf.Day")) %>% 
-  filter(last.inf%>%is.na()|all(last.inf>first_adj)|last.inf<=first_adj) %>% 
+  filter(last.inf%>%is.na()|all(last.inf>=first_adj)|last.inf<first_adj) %>% 
   filter(last.inf%>%is.na()|last.inf==max(last.inf)) %>% 
-  mutate(last.inf=if_else(last.inf>first_adj, NA, last.inf), 
+  mutate(last.inf=if_else(last.inf>=first_adj, NA, last.inf), 
          has.past.inf=if_else(last.inf%>%is.na(), 0, 1))
 
 survival_mostrecent_vaccinf_filtered <- survival_mostrecent_vaccinf_filtered %>% mutate(last.dose.adj.binary = if_else(last.dose.adj==0, 0, 1))
@@ -154,7 +154,7 @@ survival_mostrecent_vaccinf_filtered %>% filter(last.dose.adj>0) %>%
 
 survival_mostrecent_vaccinf_filtered %>% 
   select(!c(num_building, first, last, days, num_dose, num_pos)) %>% 
-  write_csv("cleaned_survival_data_prematch011124.csv")
+  write_csv("cleaned_survival_data_prematch011224.csv")
 
 # t %>% write_csv(here::here("tables/censoring.csv"))
 

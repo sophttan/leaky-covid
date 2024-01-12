@@ -36,8 +36,9 @@ m <- m %>% mutate(status=if_else(censored=="inf", 1, 0))
 basic_ve <- coxph(Surv(survival, status) ~ last.dose.adj.binary*time_since_vacc + time_since_inf_cut + frailty(subclass), m %>% filter(first_adj=="2021-12-15"))
 summary(basic_ve)
 
-
+par(mfrow = c(2, 2))
 for (i in c("None", "[0,182)", "[182,365)", "[365,Inf)")) {
   autoplot(survfit(Surv(survival, status) ~ last.dose.adj.binary + time_since_inf_cut, 
-                   m %>% filter(first_adj=="2021-12-15" & time_since_inf_cut==i)), title=i, ylim = c(0.7, 1)) %>% print()
+                   m %>% filter(first_adj=="2021-12-15" & time_since_inf_cut==i)),
+           main = paste("Recent prior infection: ", i), ylim = c(0.7, 1), legTitle="vaccine") 
 }
