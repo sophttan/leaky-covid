@@ -75,4 +75,4 @@ inc_start_end_windows <- inc_start_end_windows %>% group_by(Institution, Buildin
 
 inc_start_end_windows <- inc_start_end_windows %>% filter(end <= "2023-03-01")
 inc_start_end_windows <- inc_start_end_windows %>% mutate(inc=inf/n*100)
-inc_start_end_windows
+inc_start_end_windows %>% write_csv("cleaned_incidence_data_rolling.csv")
