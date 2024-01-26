@@ -1,15 +1,15 @@
 # Sophia Tan 12/15/23
-# Clean risk data 5/26/23
+# updated 1/23/24
+# Clean risk data 
 
 rm(list=ls())
 gc()
 
 source(here::here("config.R"))
 
-setwd("D:/CCHCS_premium/CDCR Data/May 26 2023 Data/")
+setwd("D:/CCHCS_premium/CDCR Data/Dec 16 2022 Data/")
 
-
-comorbidity <- read_delim("cov",delim = ";")
+comorbidity <- read_delim("Comorbidity_20221216.csv",delim = ";")
 covid_risk <- comorbidity %>% filter(Comorbidity=='CovidWeightedRisk')
 covid_risk
 
@@ -28,5 +28,6 @@ covid_score %>% filter(avg <= 12) %>% ggplot(aes(avg)) + geom_histogram(aes(y=st
         axis.line.y.left = element_line())
 
 covid_risk
-covid_risk %>% select(!c(Comorbidity, Month, Starting, Ending, duration)) %>% 
-  write_csv("D:/CCHCS_premium/st/indirects/cleaned-data/covid_risk_score.csv")
+covid_risk %>% select(!c(Comorbidity, Month, interval, duration)) %>% 
+  rename("risk"="Value", "risk.start"="Starting", "risk.end"="Ending") %>%
+  write_csv("D:/CCHCS_premium/st/leaky/cleaned-data/covid_risk_score012324.csv")

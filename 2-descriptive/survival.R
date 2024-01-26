@@ -1,7 +1,7 @@
 # # Sophia Tan 12/19/23
 # Basic survival data + descriptive statistics
 
-rm(list=ls())
+rm(list=ls()) 
 gc()
 
 source(here::here("config.R"))
@@ -54,14 +54,14 @@ generate_survival_data <- function(subvariant, include_inf=F) {
                             pmin(last_day[subvariant], last, inf.Day, vacc.Day,na.rm=T), 
                             pmin(last_day[subvariant], last, vacc.Day,na.rm=T)),
            earliest_novacc=if_else(include_inf, 
-                                   pmin(last_day[subvariant], last, inf.Day,na.rm=T), 
-                                   pmin(last_day[subvariant], last,na.rm=T)),
+                                   pmin(last_day[subvariant], last, inf.Day ,na.rm=T), 
+                                   pmin(last_day[subvariant], last, na.rm=T)),
            censored = case_when(earliest==last_day[subvariant]~"end_period",
                                 earliest==inf.Day~"inf",
                                 earliest==vacc.Day~"vaccinated",
                                 earliest==last~"moved"),
            censored_novacc = case_when(earliest_novacc==last_day[subvariant]~"end_period",
-                                       earliest==inf.Day~"inf",
+                                       earliest_novacc==inf.Day~"inf",
                                        earliest_novacc==last~"moved"), 
            survival = (earliest - first_day[subvariant]) %>% as.numeric(),
            survival_novacc = (earliest_novacc - first_day[subvariant]) %>% as.numeric())
@@ -154,11 +154,9 @@ survival_mostrecent_vaccinf_filtered %>% filter(last.dose.adj>0) %>%
 
 survival_mostrecent_vaccinf_filtered %>% 
   select(!c(num_building, first, last, days, num_dose, num_pos)) %>% 
-  write_csv("cleaned_survival_data_prematch011224.csv")
+  write_csv("cleaned_survival_data_prematch012624.csv")
 
 # t %>% write_csv(here::here("tables/censoring.csv"))
-
-
 
 #### look at testing data ####
 survival_mostrecent_vaccinf_filtered_testing <- survival_mostrecent_vaccinf_filtered %>%
