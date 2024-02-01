@@ -45,19 +45,33 @@ for (i in c("None", "[0,365)", "[365,730)")) {
            main = paste("Recent prior infection: ", i), ylim = c(0.7, 1), legTitle="vaccine") %>% print()
 }
 
-levels(m$time_since_vacc_cut)<-c("None", levels(m$time_since_vacc_cut)) 
-m$time_since_vacc_cut[is.na(m$time_since_vacc_cut)] <- "None"
 
+m <- m %>% mutate(time_since_vacc_cut=cut(time_since_vacc, breaks=c(0, 91, 182, 365, Inf), right = F)) 
+m <- m %>% mutate(time_since_vacc_cut = factor(time_since_vacc_cut, levels=c("[0,91)", "[91,182)","[182,365)", "[365,Inf)")))
 
-basic_ve <- coxph(Surv(survival_treatment, status) ~ treatment + time_since_inf_cut + 
+basic_ve <- coxph(Surv(survival_treatment, status) ~ treatment*time_since_vacc + time_since_inf_cut + 
                     age + risk + Sex +
                     RoomType + factor(Institution) + frailty(subclass), m)
+cox.zph(basic_ve)
 summary(basic_ve)
+plot(cox.zph(basic_ve),se=T, var=9, resid=F)
+
+ggcoxdiagnostics(basic_ve, type = "martingale", linear.predictions = TRUE)
+ggcoxdiagnostics(basic_ve, type = "deviance", linear.predictions = TRUE)
+
+ggcoxdiagnostics(coxph(Surv(survival_treatment, status) ~ age, m), type = "deviance", linear.predictions = TRUE)
+ggcoxdiagnostics(coxph(Surv(survival_treatment, status) ~ age, m), type = "deviance", linear.predictions = TRUE)
+
 
 basic_ve <- coxph(Surv(survival_treatment, status) ~ tt(time_since_vacc) + time_since_inf_cut + 
                     age + risk + Sex +
                     RoomType + factor(Institution) + frailty(subclass), 
                   tt=function(x,t,...){x+t},m)
+summary(basic_ve)
+
+basic_ve <- coxph(Surv(survival_treatment, status) ~ time_since_vacc_cut + time_since_inf_cut + 
+                    age + risk + Sex +
+                    RoomType + factor(Institution) + frailty(subclass),m)
 summary(basic_ve)
 
 basic_ve <- coxph(Surv(survival_treatment, status) ~ treatment*tt(time_since_vacc) + time_since_inf_cut +
