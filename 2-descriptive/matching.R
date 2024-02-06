@@ -122,24 +122,55 @@ basic_ve <- coxph(Surv(time1, time2, status) ~ last.dose.adj.binary + time_since
                     RoomType + factor(Institution) + frailty(subclass), m_timevar_summary)
 summary(basic_ve)
 
-incidence <- read_csv("cleaned_incidence_data_rolling.csv") %>% select(Institution, BuildingId, start, end, inc) %>% 
+vacc <- read_csv("complete_vaccine_data121523.csv") %>% select(ResidentId, Date, num_dose)
+m_timevar <- m_timevar %>% left_join(vacc, by=c("ResidentId", "first_adj"="Date"))
+m_timevar <- m_timevar %>% mutate(num_dose=if_else(time1==0, NA, num_dose))
+m_timevar <- m_timevar %>% group_by(id) %>% fill(num_dose, .direction="down")
+m_timevar <- m_timevar %>% group_by(id, num_dose) %>% mutate(time_since_vacc2=0:(n()-1))
+m_timevar <- m_timevar %>%
+  mutate(time_since_vacc=if_else(num_dose%>%is.na(),time_since_vacc+time1, time_since_vacc2))
+m_timevar <- m_timevar %>% 
+  mutate(time_since_vacc_cut=cut(time_since_vacc, breaks=c(0, 30, 61, 91, 182, 365, Inf), right = F)) 
+m_timevar <- m_timevar %>% mutate(time_since_vacc_cut = factor(time_since_vacc_cut, levels=c("[0,30)", "[30,61)","[61,91)", "[91,182)","[182,365)","[365,Inf)")))
+levels(m_timevar$time_since_vacc_cut)<-c(levels(m_timevar$time_since_vacc_cut), "None") 
+m_timevar$time_since_vacc_cut[is.na(m_timevar$time_since_vacc_cut)] <- "None"
+m_timevar <- m_timevar %>% mutate(time_since_vacc_cut = factor(time_since_vacc_cut, levels=c("None","[0,30)", "[30,61)","[61,91)", "[91,182)","[182,365)","[365,Inf)")))
+
+incidence <- read_csv("cleaned_incidence_data_rolling.csv") %>% select(Institution, BuildingId, start, end, inf, inc) %>% 
   mutate(end_offset=end+3)
 m_timevar_inc <- m_timevar %>% left_join(incidence, by=c("Institution", "BuildingId", "first_adj"="end_offset")) %>%
-  replace_na(list(inc=0))
+  replace_na(list(inf=0, inc=0)) %>%
+  mutate(status=if_else(time2<survival_binaryvacc, 0, status)) 
 
-m_timevar_inc_summary <- m_timevar_inc %>% group_by(id, inc, time_since_inf_cut) %>% 
-  summarise(time1=time1, consecutive=c(NA,diff(time1))) %>% filter(consecutive%>%is.na()|consecutive!=1) %>%
-  ungroup() %>% mutate(group=1:n()) %>% select(!c(inc, consecutive))
 
-m_timevar_inc <- m_timevar_inc %>% left_join(m_timevar_inc_summary) %>% 
-  group_by(id) %>% fill(group, .direction = "down") %>% 
-  group_by(id, group, subclass, Institution, BuildingId, RoomType, survival_binaryvacc, last.dose.adj.binary,
-           age, risk, Sex, time_since_inf_cut) %>%
-  summarise(inc=first(inc), time1=first(time1), time2=last(time2), status=max(status)) 
+# m_timevar_inc_summary <- m_timevar_inc %>% group_by(id, inf, time_since_vacc_cut, time_since_inf_cut) %>% 
+#   summarise(time1=time1, consecutive=c(NA,diff(time1))) %>% filter(consecutive%>%is.na()|consecutive!=1) %>%
+#   ungroup() %>% mutate(group=1:n()) %>% select(!c(inf, consecutive))
+# 
+# m_timevar_inc <- m_timevar_inc %>% left_join(m_timevar_inc_summary) %>% 
+#   group_by(id) %>% fill(group, .direction = "down") %>% 
+#   group_by(id, group, subclass, Institution, BuildingId, RoomType, survival_binaryvacc, last.dose.adj.binary,
+#            age, risk, Sex, time_since_vacc_cut, time_since_inf_cut, status) %>%
+#   summarise(inf=first(inf), time1=first(time1), time2=last(time2))%>%
+#   ungroup()%>%
+#   mutate(status=if_else(time2<survival_binaryvacc, 0, status)) %>%
+#   arrange(id, time1)
 
-basic_ve <- coxph(Surv(time1, time2, status) ~ last.dose.adj.binary*inc + time_since_inf_cut + 
+# categorical incidence
+m_timevar_inc <- m_timevar_inc %>% mutate(inc_cat = case_when(inc==0~0,
+                                                              inc<2.5~1,
+                                                              T~2)%>%factor())
+
+basic_ve <- coxph(Surv(time1, time2, status) ~ last.dose.adj.binary*inf_cat + time_since_inf_cut + 
                     age + risk + Sex +
-                    RoomType + factor(Institution) + frailty(subclass), m_timevar_inc)
+                    RoomType + #factor(Institution) + 
+                    frailty(subclass), m_timevar_inc)
+summary(basic_ve)
+
+basic_ve <- coxph(Surv(time1, time2, status) ~ time_since_vacc_cut*inc + time_since_inf_cut + 
+                    age + risk + Sex +
+                    RoomType + factor(Institution) + 
+                    frailty(subclass), m_timevar_inc)
 summary(basic_ve)
 
 m <- m %>% mutate(time_since_vacc_cut=cut(time_since_vacc, breaks=c(0, 91, 182, 365, Inf), right = F)) 
