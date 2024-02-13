@@ -16,8 +16,10 @@ resident_movement <- resident_movement %>% group_by(ResidentId) %>% filter(first
 testing <- read_csv("complete_testing_data121323.csv")
 
 vacc <- read_csv("complete_vaccine_data121523.csv")
+# offset vaccine protection by 2 weeks
 vacc <- vacc %>%
-  rename("vacc.Day"="Date")
+  rename("vacc.Day"="Date") %>%
+  mutate(vacc.Day=vacc.Day+14)
 
 inf <- testing %>% group_by(ResidentId, num_pos) %>% filter(num_pos>0) %>% summarise_all(first) %>% select(ResidentId, Day, num_pos)
 inf <- inf %>%
@@ -44,21 +46,21 @@ generate_survival_data <- function(subvariant, include_inf=F) {
   resident_movement_subvar <- resident_movement_subvar %>%
     left_join(vacc %>% 
                 select(ResidentId, vacc.Day, num_dose) %>% 
-                filter(vacc.Day >= first_day[subvariant] & vacc.Day <= last_day[subvariant])) %>%
+                filter(vacc.Day > first_day[subvariant] & vacc.Day <= last_day[subvariant])) %>%
     filter(n()==1 | vacc.Day==last(vacc.Day))
   
   resident_movement_subvar <- resident_movement_subvar %>% 
     mutate(vacc.Day = if_else(vacc.Day <= first_day[subvariant], NA, vacc.Day),
            inf.Day = if_else(inf.Day < first_day[subvariant], NA, inf.Day),
            earliest=if_else(include_inf, 
-                            pmin(last_day[subvariant], last, inf.Day, vacc.Day,na.rm=T), 
-                            pmin(last_day[subvariant], last, vacc.Day,na.rm=T)),
+                            pmin(last_day[subvariant], last, inf.Day, vacc.Day-1,na.rm=T), 
+                            pmin(last_day[subvariant], last, vacc.Day-1,na.rm=T)),
            earliest_novacc=if_else(include_inf, 
                                    pmin(last_day[subvariant], last, inf.Day ,na.rm=T), 
                                    pmin(last_day[subvariant], last, na.rm=T)),
            censored = case_when(earliest==last_day[subvariant]~"end_period",
                                 earliest==inf.Day~"inf",
-                                earliest==vacc.Day~"vaccinated",
+                                earliest==(vacc.Day-1)~"vaccinated",
                                 earliest==last~"moved"),
            censored_novacc = case_when(earliest_novacc==last_day[subvariant]~"end_period",
                                        earliest_novacc==inf.Day~"inf",
@@ -82,10 +84,10 @@ summarise_censoring <- function(data) {
   cbind(subvar=subvariant, n=nrow(resident_movement_subvar)) %>% cbind(summary_subvar, summary_subvar_novacc)
 } 
 
-survival <- rbind(generate_survival_data(1, T),
-                  generate_survival_data(2, T), 
-                  generate_survival_data(3, T), 
-                  generate_survival_data(4, T))
+survival <- rbind(generate_survival_data(1, T))
+                  # generate_survival_data(2, T), 
+                  # generate_survival_data(3, T), 
+                  # generate_survival_data(4, T))
 
 survival
 
@@ -154,7 +156,7 @@ survival_mostrecent_vaccinf_filtered %>% filter(last.dose.adj>0) %>%
 
 survival_mostrecent_vaccinf_filtered %>% 
   select(!c(num_building, first, last, days, num_dose, num_pos)) %>% 
-  write_csv("cleaned_survival_data_prematch012624.csv")
+  write_csv("cleaned_survival_data_prematch020624.csv")
 
 # t %>% write_csv(here::here("tables/censoring.csv"))
 

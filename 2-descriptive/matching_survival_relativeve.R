@@ -21,7 +21,7 @@ risk <- risk %>% group_by(ResidentId, group) %>%
   summarise(risk.start=first(risk.start), risk.end=last(risk.end), risk=first(risk)) %>% select(!group)
 risk  
 
-data <- read_csv("cleaned_survival_data_prematch012624.csv") %>% 
+data <- read_csv("cleaned_survival_data_prematch020624.csv") %>% 
   filter(first_adj=="2021-12-15") 
 
 data <- data %>% mutate(time_since_vacc=(first_adj-last.vacc)%>%as.numeric(),
@@ -126,7 +126,8 @@ levels(m_timevar$time_since_inf_cut)<-c(levels(m_timevar$time_since_inf_cut),"No
 m_timevar$time_since_inf_cut[is.na(m_timevar$time_since_inf_cut)] <- "None"
 m_timevar <- m_timevar %>% mutate(time_since_inf_cut = factor(time_since_inf_cut, levels=c("None","[0,365)", "[365,730)", "[730,Inf)")))
 
-vacc <- read_csv("complete_vaccine_data121523.csv") %>% select(ResidentId, Date, num_dose)
+vacc <- read_csv("complete_vaccine_data121523.csv") %>% select(ResidentId, Date, num_dose) %>% 
+  mutate(Date=Date+14)
 m_timevar <- m_timevar %>% left_join(vacc, by=c("ResidentId", "first_adj"="Date"))
 m_timevar <- m_timevar %>% mutate(num_dose=if_else(time1==0, NA, num_dose))
 m_timevar <- m_timevar %>% group_by(id) %>% fill(num_dose, .direction="down")
@@ -158,16 +159,24 @@ m_timevar_inc <- m_timevar_inc %>% mutate(status=if_else(time2<survival_treatmen
 #   mutate(status=if_else(time2<survival_treatment, 0, status)) %>%
 #   arrange(id, time1)
 
+clean_results <- function(results) {
+  summary(results)%>%coef()%>%as.data.frame()%>%
+    mutate(lb=(coef-2*`se(coef)`)%>%exp(), ub=(coef+2*`se(coef)`)%>%exp(), coef=coef%>%exp()) %>%
+    select(coef, lb, ub, p) %>% round(4) %>% 
+    filter(!grepl("Institution", row.names(.)))
+}
+
 set.seed(15)
 subclass_subset <- m$subclass%>%sample(32972/4)
 m_timevar_inc_sub <- m_timevar_inc%>%ungroup()%>%filter(subclass%in%subclass_subset)
 
-basic_ve <- coxph(Surv(time1, time2, status) ~ treatment*inc + time_since_inf_cut + 
+# check basic ve 
+basic_ve <- coxph(Surv(time1, time2, status) ~ treatment*time_since_vacc + time_since_inf_cut + 
                     age + risk + Sex +
-                    RoomType + frailty(subclass), #+ factor(Institution) + frailty(subclass),
+                    RoomType + factor(Institution) + frailty(subclass),
                     m_timevar_inc)
 cox.zph(basic_ve)
-summary(basic_ve)
+clean_results(basic_ve)
 
 
 basic_ve <- coxph(Surv(time1, time2, status) ~ time_since_vacc*inc + treatment*time_since_vacc + time_since_inf_cut + 
@@ -178,12 +187,12 @@ cox.zph(basic_ve)
 summary(basic_ve)
 
 
-basic_ve <- coxph(Surv(time1, time2, status) ~ treatment*time_since_vacc*inc + time_since_inf_cut + 
+basic_ve <- coxph(Surv(time1, time2, status) ~ treatment*inc + time_since_inf_cut + 
                     age + risk + Sex +
-                    RoomType + frailty(subclass), #+ factor(Institution) + frailty(subclass),
+                    RoomType + factor(Institution) + frailty(subclass),
                   m_timevar_inc)
 cox.zph(basic_ve)
-summary(basic_ve)
+clean_results(basic_ve)
 
 
 # categorical incidence
@@ -209,8 +218,8 @@ summary(basic_ve)
 m_timevar_inc <- m_timevar_inc %>% mutate(inc_binary=ifelse(inc==0, 0, 1),
                                           inc_cat = case_when(inc==0~0,
                                                               inc<1~1,
-                                                              inc<3~2,
-                                                              inc<5~3,
+                                                              inc<5~2,
+                                                              inc<10~3,
                                                               T~4)%>%factor(),
                                           inf_cat = case_when(inf==0~0,
                                                               inf==1~1,
@@ -218,10 +227,11 @@ m_timevar_inc <- m_timevar_inc %>% mutate(inc_binary=ifelse(inc==0, 0, 1),
                                                               inf<10~3,
                                                               T~4)%>%factor())
 
-basic_ve <- coxph(Surv(time1, time2, status) ~ treatment*inc_binary*inc + treatment*time_since_vacc + time_since_inf_cut + 
+basic_ve <- coxph(Surv(time1, time2, status) ~ treatment*inc_binary + time_since_inf_cut + 
                     age + risk + Sex +
-                    RoomType + frailty(subclass), #+ factor(Institution) + frailty(subclass),
+                    RoomType + factor(Institution) + frailty(subclass),
                   m_timevar_inc)
+clean_results(basic_ve)
 
 basic_ve <- coxph(Surv(time1, time2, status) ~ treatment*inf_cat + treatment*time_since_vacc + time_since_inf_cut + 
                     age + risk + Sex +
@@ -240,3 +250,66 @@ summary(basic_ve)
 
 ggsurvplot(fit  = survfit(Surv(time1, time2, event=status) ~ inc_cat, data=m_timevar_inc), 
            fun = "cloglog")
+
+
+data_vacc_filtered <- data_vacc %>% filter((treatment==0&time_since_vacc>=200)|(treatment==1&time_since_vacc<200))
+matchit_results_inf <- matchit(treatment~first_adj+Institution+BuildingId+RoomType+time_since_inf_cut+
+                                 age + risk + Sex, 
+                               data=data_vacc,
+                               exact=~first_adj+Institution+BuildingId+RoomType+time_since_inf_cut) 
+summary(matchit_results_inf)
+
+m2 <- matchit_results_inf %>% get_matches() 
+m2
+m2 <- m2 %>% mutate(status=if_else(censored_treatment=="inf", 1, 0))
+
+m2_timevar <- m2 %>%
+  group_by(id) %>% 
+  uncount(survival_treatment,.remove = F) 
+
+m2_timevar <- m2_timevar %>% 
+  mutate(time1=seq(0,first(survival_treatment)-1),
+         time2=seq(first(survival_treatment))) %>%
+  mutate(first_adj=first_adj+time1)
+
+m2_timevar2 <- m_timevar2 %>%
+  mutate(time_since_vacc=time_since_vacc+time1,
+         time_since_inf=time_since_inf+time1,
+         time_since_inf_cut=cut(time_since_inf, breaks=c(0, 365, 730, Inf), right = F)) 
+
+levels(m2_timevar$time_since_inf_cut)<-c(levels(m2_timevar$time_since_inf_cut),"None") 
+m2_timevar$time_since_inf_cut[is.na(m2_timevar$time_since_inf_cut)] <- "None"
+m2_timevar <- m2_timevar %>% mutate(time_since_inf_cut = factor(time_since_inf_cut, levels=c("None","[0,365)", "[365,730)", "[730,Inf)")))
+
+m2_timevar <- m2_timevar %>% mutate(status=if_else(time2<survival_treatment, 0, status))
+m2_timevar <- m2_timevar %>% filter(treatment==0|(treatment==1&time_since_vacc<200))
+m2_timevar <- m2_timevar %>% group_by(id) %>% mutate(survival_treatment=max(time2)) %>%
+  group_by(subclass) %>% filter(time2<=min(survival_treatment))
+
+m2_timevar_inc <- m2_timevar %>% left_join(incidence, by=c("Institution", "BuildingId", "first_adj"="end_offset")) %>%
+  replace_na(list(inf=0, inc=0))
+
+basic_ve <- coxph(Surv(time1, time2, status) ~ treatment*time_since_vacc + time_since_inf_cut + 
+                    age + risk + Sex +
+                    RoomType + factor(Institution) + frailty(subclass),
+                  m2_timevar_inc)
+summary(basic_ve)
+
+basic_ve <- coxph(Surv(time1, time2, status) ~ treatment*inc_binary + treatment*time_since_vacc + time_since_inf_cut + 
+                    age + risk + Sex +
+                    RoomType + factor(Institution) + frailty(subclass),
+                  m2_timevar_inc)
+summary(basic_ve)
+
+basic_ve <- coxph(Surv(time1, time2, status) ~ time_since_vacc*inc + treatment*time_since_vacc + time_since_inf_cut + 
+                    age + risk + Sex +
+                    RoomType + factor(Institution) + frailty(subclass),
+                  m2_timevar_inc)
+summary(basic_ve)
+
+m2_timevar_inc_filter <- m2_timevar_inc %>% filter(inc>0) 
+basic_ve <- coxph(Surv(time1, time2, status) ~ treatment*inf + treatment*time_since_vacc + time_since_inf_cut + 
+                    age + risk + Sex +
+                    RoomType + factor(Institution) + frailty(subclass),
+                  m2_timevar_inc_filter)
+summary(basic_ve)
